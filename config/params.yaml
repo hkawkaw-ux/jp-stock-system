@@ -80,6 +80,6 @@ data:
   source: yfinance       # yfinance | jquants | csv
   cache_dir: ./data
   yfinance:
-    request_interval_sec: 1.0   # 銘柄間のリクエスト間隔（Yahoo側ブロック対策）
+    request_interval_sec: 2.5   # 銘柄間のリクエスト間隔（Streamlit Cloud等の共有IPからのレート制限対策で1.0→2.5に強化）
     history_period: 6mo         # 日足取得期間（signal_engine用）
-    retries: 3
+    retries: 5                  # リトライ回数（3→5に強化）

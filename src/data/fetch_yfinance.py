@@ -35,7 +35,7 @@ UNIVERSE_COLUMNS = [
 # ============================================================
 # 共通: リトライ（Yahoo側の断続的な取得失敗に対応）
 # ============================================================
-def _retry(func, retries=3, backoff=1.0):
+def _retry(func, retries=5, backoff=2.0):
     last_exc = None
     for attempt in range(retries):
         try:
@@ -162,7 +162,7 @@ def _universe_cache_path(segment_map: dict) -> Path:
     return CACHE_DIR / f"universe_{datetime.now():%Y%m%d}_{cache_key}.csv"
 
 
-def fetch_universe(segment_map: dict, cache: bool = True, request_interval: float = 1.0) -> pd.DataFrame:
+def fetch_universe(segment_map: dict, cache: bool = True, request_interval: float = 2.5) -> pd.DataFrame:
     """
     segment_map: {ticker: (segment, name)} 形式
     戻り値: segment_scoring.py の make_demo_universe() と同じ列構成の DataFrame
