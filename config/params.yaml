@@ -1,0 +1,85 @@
+# ============================================================
+#  日本株スコアリング・売買シグナルシステム パラメータ定義
+#  ※ 閾値・配点をコードから分離。実データ分布に合わせて調整すること。
+# ============================================================
+
+# ---------- 短期シグナルエンジン (signal_engine.py) ----------
+signal:
+  moving_average:
+    short: 5
+    mid: 25
+    long: 75
+  rsi:
+    period: 14
+    overbought: 75      # SELL: 買われ過ぎ
+    oversold: 30
+  volume:
+    surge_prev: 1.5     # 出来高 前日比 急増しきい値
+    surge_avg20: 2.0    # 出来高 20日平均比 大幅増しきい値
+  adjustment:
+    min_days: 10        # 最低調整日数（エネルギー蓄積）
+  breakout:
+    lookback: 20        # 高値参照期間
+  stoploss:
+    ma25_deviation: -0.05   # 25日線 -5% 割れで損切り
+  patterns:
+    A_rsi: [50, 65]     # 成長株順張り
+    B_rsi: [35, 45]     # 押し目買い
+    B_ma25_dev: 0.03
+    C_rsi: [55, 70]     # 機関追随（最強候補）
+
+# ---------- セグメント評価エンジン (segment_scoring.py) ----------
+scoring:
+  # 配点（合計100点）
+  weights:
+    growth: 20          # 業績成長率
+    op_margin: 10       # 営業利益率
+    roe: 10             # ROE
+    per: 10             # PER（低いほど高評価）
+    pbr: 5              # PBR（低いほど高評価）
+    div_yield: 10       # 配当利回り
+    div_growth: 5       # 増配実績
+    technical: 15       # テクニカル
+    volume: 5           # 出来高
+    margin_ratio: 5     # 信用倍率（任意）
+    analyst: 5          # アナリスト評価（任意）
+  optional: [margin_ratio, analyst]   # 欠損許容→比例配分
+
+  # 正規化しきい値（満点となる水準）
+  normalize:
+    growth_full: 30     # %
+    op_margin_full: 25  # %
+    roe_full: 20        # %
+    div_yield_full: 4.0 # %
+    div_growth_full: 10 # 年
+    per_full: 8         # 倍（満点）
+    per_zero: 40        # 倍（0点）
+    pbr_full: 0.8       # 倍（満点）
+    pbr_zero: 5.0       # 倍（0点）
+    margin_full: 1.0    # 倍（満点）
+    margin_zero: 6.0    # 倍（0点）
+
+  # セグメント強弱の合成重み
+  strength_weights:
+    momentum: 0.40
+    inflow: 0.30
+    fundamental: 0.30
+
+  ranking:
+    top_n: 10           # 各セグメントの抽出件数
+
+# ---------- ユニバース定義 ----------
+universe:
+  segments:
+    大型株: 150
+    中型株: 150
+    小型成長株: 100
+
+# ---------- データ取得 ----------
+data:
+  source: yfinance       # yfinance | jquants | csv
+  cache_dir: ./data
+  yfinance:
+    request_interval_sec: 1.0   # 銘柄間のリクエスト間隔（Yahoo側ブロック対策）
+    history_period: 6mo         # 日足取得期間（signal_engine用）
+    retries: 3
