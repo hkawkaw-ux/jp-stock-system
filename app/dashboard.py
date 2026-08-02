@@ -18,12 +18,14 @@ import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.backtest import SAMPLE_TICKERS
-from src.data.fetch_yfinance import fetch_ohlcv, fetch_universe
+from src.data.fetch_yfinance import fetch_ohlcv
 from src.segment_scoring import segment_strength, top_n_per_segment, total_score
 from src.signal_engine import add_indicators, evaluate, latest_signal
+from src.snapshot import load_universe_snapshot
 
 PLOTLY_FONT = dict(family="Yu Gothic, Meiryo, MS Gothic, sans-serif")
+SNAPSHOT_CSV = Path(__file__).resolve().parent / "universe_snapshot.csv"
+SNAPSHOT_META = Path(__file__).resolve().parent / "universe_snapshot_meta.json"
 
 st.set_page_config(page_title="日本株スコアリング・売買シグナルシステム", layout="wide")
 
@@ -37,8 +39,12 @@ def load_signal(ticker: str, period: str):
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_universe():
-    df = fetch_universe(SAMPLE_TICKERS, cache=True)
-    return total_score(df)
+    """
+    Streamlit Cloud上でのリアルタイムyfinance取得はレート制限を受けやすいため、
+    GitHub Actionsで定期取得した静的スナップショット（app/universe_snapshot.csv）を読み込む。
+    """
+    df, fetched_at = load_universe_snapshot(SNAPSHOT_CSV, SNAPSHOT_META)
+    return total_score(df), fetched_at
 
 
 def render_signal_tab():
@@ -115,12 +121,13 @@ def render_segment_tab():
         "※本来の400銘柄評価（大型株/中型株/小型成長株）ではなく、"
         "バックテスト検証用の28銘柄（銀行・証券・不動産・自動車・電機・商社の6業種）による簡易版です。"
     )
-    with st.spinner("データを取得中...（初回は数分かかる場合があります）"):
-        try:
-            scored = load_universe()
-        except Exception as e:
-            st.error(f"データ取得に失敗しました: {e}")
-            return
+    try:
+        scored, fetched_at = load_universe()
+    except Exception as e:
+        st.error(f"データ取得に失敗しました: {e}")
+        return
+    if fetched_at:
+        st.caption(f"データ取得日時: {fetched_at}")
 
     strength = segment_strength(scored)
     fig = go.Figure(go.Bar(
@@ -139,12 +146,13 @@ def render_segment_tab():
 def render_ranking_tab():
     st.subheader("業種別 代表銘柄ランキング")
     st.caption("※検証用28銘柄の中でのスコア順ランキングです。")
-    with st.spinner("データを取得中...（初回は数分かかる場合があります）"):
-        try:
-            scored = load_universe()
-        except Exception as e:
-            st.error(f"データ取得に失敗しました: {e}")
-            return
+    try:
+        scored, fetched_at = load_universe()
+    except Exception as e:
+        st.error(f"データ取得に失敗しました: {e}")
+        return
+    if fetched_at:
+        st.caption(f"データ取得日時: {fetched_at}")
 
     tops = top_n_per_segment(scored, n=10)
     for sector, sub in tops.items():

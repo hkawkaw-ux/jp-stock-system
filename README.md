@@ -48,6 +48,28 @@ python src/signal_engine.py      # 短期シグナルのデモ
 python src/segment_scoring.py    # セグメント評価のデモ（CSV出力）
 ```
 
+## Streamlitダッシュボード
+
+```bash
+streamlit run app/dashboard.py
+```
+
+タブ2「セグメント強弱」・タブ3「代表銘柄ランキング」は、Streamlit Cloud上でのリアルタイム
+yfinance取得がYahoo Finance側のレート制限を受けやすいため、`app/universe_snapshot.csv`
+（静的スナップショット）を読み込む方式にしている。このスナップショットは
+`.github/workflows/update_universe.yml` により毎日自動更新される（GitHub Actions）。
+
+手動で更新したい場合:
+
+```bash
+python scripts/update_universe_snapshot.py
+git add app/universe_snapshot.csv app/universe_snapshot_meta.json
+git commit -m "chore: update universe snapshot"
+git push
+```
+
+タブ1「銘柄シグナル判定」は1銘柄のみのアクセスのため、引き続きリアルタイムyfinance取得。
+
 ---
 
 ## 開発ロードマップ（優先度順）
