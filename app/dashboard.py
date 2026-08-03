@@ -4,6 +4,7 @@
 タブ1: 銘柄コード入力 → signal_engineで判定 → チャート＋シグナル表示
 タブ2: セグメント（業種）強弱
 タブ3: 代表銘柄ランキング
+タブ4: ウォッチリスト（複数銘柄のBUY/SELL/HOLDシグナル一覧）
 
 ※タブ2・3は本来の400銘柄評価ではなく、バックテスト検証用の28銘柄
   （銀行・証券・不動産・自動車・電機・商社の6業種）による簡易版。
@@ -22,10 +23,14 @@ from src.data.fetch_yfinance import fetch_ohlcv
 from src.segment_scoring import segment_strength, top_n_per_segment, total_score
 from src.signal_engine import add_indicators, evaluate, latest_signal
 from src.snapshot import load_universe_snapshot
+from src.watchlist import compute_signal_row, load_watchlist
 
 PLOTLY_FONT = dict(family="Yu Gothic, Meiryo, MS Gothic, sans-serif")
 SNAPSHOT_CSV = Path(__file__).resolve().parent / "universe_snapshot.csv"
 SNAPSHOT_META = Path(__file__).resolve().parent / "universe_snapshot_meta.json"
+WATCHLIST_CONFIG = Path(__file__).resolve().parents[1] / "config" / "watchlist.yaml"
+WATCHLIST_SIGNALS_CSV = Path(__file__).resolve().parent / "watchlist_signals.csv"
+WATCHLIST_SIGNALS_META = Path(__file__).resolve().parent / "watchlist_signals_meta.json"
 
 st.set_page_config(page_title="日本株スコアリング・売買シグナルシステム", layout="wide")
 
@@ -162,13 +167,86 @@ def render_ranking_tab():
         st.dataframe(view, use_container_width=True, hide_index=True)
 
 
+def render_watchlist_tab():
+    st.subheader("ウォッチリスト")
+    st.caption(
+        "登録銘柄のBUY/SELL/HOLDシグナルを一覧表示します。"
+        "事前計算済みの銘柄（config/watchlist.yaml登録分）は即座に表示され、"
+        "その場で追加した未登録銘柄はリアルタイムに取得します。"
+    )
+
+    if "watchlist" not in st.session_state:
+        st.session_state["watchlist"] = load_watchlist(WATCHLIST_CONFIG)
+
+    col_input, col_button = st.columns([3, 1])
+    with col_input:
+        new_code = st.text_input("証券コードを追加（4桁）", key="watchlist_add_code")
+    with col_button:
+        st.write("")
+        st.write("")
+        if st.button("追加", key="watchlist_add_btn", use_container_width=True):
+            code = new_code.strip()
+            already_registered = any(t["code"] == code for t in st.session_state["watchlist"])
+            if code and not already_registered:
+                st.session_state["watchlist"].append({"code": code, "name": code})
+                st.rerun()
+
+    if not st.session_state["watchlist"]:
+        st.info("銘柄が登録されていません。上の欄からコードを追加してください。")
+        return
+
+    precomputed = {}
+    fetched_at = None
+    if WATCHLIST_SIGNALS_CSV.exists():
+        pre_df, fetched_at = load_universe_snapshot(WATCHLIST_SIGNALS_CSV, WATCHLIST_SIGNALS_META)
+        precomputed = {str(row["code"]): row.to_dict() for _, row in pre_df.iterrows()}
+    if fetched_at:
+        st.caption(f"事前計算データ取得日時: {fetched_at}")
+
+    rows = []
+    for t in st.session_state["watchlist"]:
+        code = t["code"]
+        if code in precomputed:
+            rows.append(precomputed[code])
+            continue
+        with st.spinner(f"{code} を取得中..."):
+            try:
+                rows.append(compute_signal_row(code, t.get("name", code)))
+            except Exception as e:
+                rows.append({
+                    "code": code, "name": t.get("name", code), "close": None,
+                    "action": "ERROR", "patterns": "", "rsi": None, "score": None,
+                })
+
+    view = pd.DataFrame(rows).rename(columns={
+        "code": "コード", "name": "銘柄", "close": "終値", "action": "アクション",
+        "patterns": "パターン", "rsi": "RSI", "score": "スコア",
+    })
+    st.dataframe(view, use_container_width=True, hide_index=True)
+
+    remove_options = [""] + [t["code"] for t in st.session_state["watchlist"]]
+    col_select, col_remove = st.columns([3, 1])
+    with col_select:
+        remove_code = st.selectbox("削除する銘柄コード", remove_options, key="watchlist_remove_select")
+    with col_remove:
+        st.write("")
+        st.write("")
+        if st.button("削除", key="watchlist_remove_btn", use_container_width=True) and remove_code:
+            st.session_state["watchlist"] = [
+                t for t in st.session_state["watchlist"] if t["code"] != remove_code
+            ]
+            st.rerun()
+
+
 st.title("日本株スコアリング・売買シグナルシステム")
 st.caption("本システムは投資判断の補助を目的としています。シグナルの的中・利益を保証しません。")
 
-tab1, tab2, tab3 = st.tabs(["銘柄シグナル判定", "セグメント強弱", "代表銘柄ランキング"])
+tab1, tab2, tab3, tab4 = st.tabs(["銘柄シグナル判定", "セグメント強弱", "代表銘柄ランキング", "ウォッチリスト"])
 with tab1:
     render_signal_tab()
 with tab2:
     render_segment_tab()
 with tab3:
     render_ranking_tab()
+with tab4:
+    render_watchlist_tab()
